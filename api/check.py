@@ -1,9 +1,7 @@
 import os
 import requests
 from bs4 import BeautifulSoup
-from http.server import BaseHTTPRequestHandler
 
-# Link de Google Calendar
 LINK_CALENDAR = "https://calendar.app.google/URnpmiyiKZtAurqP8"
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
@@ -19,7 +17,7 @@ HEADERS = {
 
 def enviar_telegram(mensaje):
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
-        print("Faltan configurar las variables de entorno de Telegram.")
+        print("❌ Error: Faltan las variables de entorno de Telegram.")
         return
 
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
@@ -31,7 +29,7 @@ def enviar_telegram(mensaje):
     try:
         requests.post(url, data=payload, timeout=10)
     except Exception as e:
-        print(f"Error al enviar mensaje a Telegram: {e}")
+        print(f"❌ Error al enviar mensaje a Telegram: {e}")
 
 def verificar_turnos():
     try:
@@ -39,7 +37,6 @@ def verificar_turnos():
         res = session.get(LINK_CALENDAR, headers=HEADERS, timeout=15, allow_redirects=True)
         html = res.text
 
-        # Búsqueda de señales de falta de turnos en el HTML renderizado por Google
         sin_turnos = (
             "No hay horarios disponibles" in html or 
             "No available times" in html or 
@@ -52,21 +49,13 @@ def verificar_turnos():
                 f"Parece que se liberó un espacio en la agenda.\n\n"
                 f"Reservá rápido acá: {LINK_CALENDAR}"
             )
+            print("🚀 ¡Turno detectado! Enviando alerta...")
             enviar_telegram(msg)
-            return "¡Turno detectado y notificación enviada!"
         else:
-            return "Chequeo finalizado: Aún no hay turnos disponibles."
+            print("🔍 Chequeo realizado: Aún no hay turnos disponibles.")
 
     except Exception as e:
-        return f"Error al verificar la agenda: {e}"
+        print(f"❌ Error al verificar la agenda: {e}")
 
-# Entrypoint estándar de Vercel Serverless
-class handler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        resultado = verificar_turnos()
-        
-        self.send_response(200)
-        self.send_header('Content-type', 'text/plain; charset=utf-8')
-        self.end_headers()
-        self.wfile.write(resultado.encode('utf-8'))
-        return
+if __name__ == "__main__":
+    verificar_turnos()
