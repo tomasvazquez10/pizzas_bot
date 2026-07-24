@@ -6,8 +6,8 @@ from http.server import BaseHTTPRequestHandler
 # Link de Google Calendar
 LINK_CALENDAR = "https://calendar.app.google/URnpmiyiKZtAurqP8"
 
-TELEGRAM_TOKEN = os.getenv("8932905331:AAG6mOmCoPVjqvWWD0YpBRAZfi0Wm0jLf-E")
-TELEGRAM_CHAT_ID = os.getenv("5892894506")
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 HEADERS = {
     "User-Agent": (
