@@ -26,54 +26,63 @@ def enviar_telegram(mensaje):
 def verificar_turnos_playwright():
     try:
         with sync_playwright() as p:
-            # Lanzamos navegador Chromium en modo Headless
             browser = p.chromium.launch(headless=True)
             page = browser.new_page()
             
-            # Navegamos al link esperando a que la red esté inactiva (cargue completa de JS)
+            # Navegamos esperando a que la SPA cargue los datos
             page.goto(LINK_CALENDAR, wait_until="networkidle", timeout=30000)
-            page.wait_for_timeout(3000) # Espera de cortesía de 3 segundos
+            page.wait_for_timeout(3000)
             
-            # 1. Chequeo de texto general si no hay disponibilidad
-            body_text = page.inner_text("body")
-            if "No hay horarios disponibles" in body_text or "No available times" in body_text:
+            # 1. Verificación global rápida en el cuerpo del texto
+            body_text = page.inner_text("body").lower()
+            if "no hay horarios disponibles" in body_text or "no available times" in body_text and not any(h in body_text for h in ["select a time", "selecciona un horario", "hs", "pm", "am"]):
                 print("🔍 Chequeo realizado: Aún no hay turnos disponibles.")
                 browser.close()
                 return
 
-            # 2. Buscar elementos interactivos de días/turnos con aria-label o botones activos
-            elementos = page.query_selector_all("button[aria-label], [role='button'][aria-label], button[data-timestamp]")
+            # 2. Capturamos todos los botones/elementos interactivos
+            elementos = page.query_selector_all("button[aria-label], [role='button'][aria-label]")
             
-            fechas_detectadas = []
+            fechas_disponibles = []
+            
             for elem in elementos:
-                label = elem.get_attribute("aria-label") or elem.inner_text()
-                if label and any(palabra in label.lower() for palabra in ["disponible", "available", "hs", "pm", "am", "enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]):
-                    # Limpiamos saltos de línea extra
+                label = elem.get_attribute("aria-label") or ""
+                label_lower = label.lower()
+                
+                # REGLA DE EXCLUSIÓN: Si dice "no available times" o "sin horarios", SE IGNORA
+                if "no available times" in label_lower or "no hay horarios" in label_lower or "sin horarios" in label_lower:
+                    continue
+
+                # REGLA DE INCLUSIÓN: Debe indicar un turno o disponibilidad explícita
+                # (Ejemplos: "available", o un horario concreto con "am"/"pm"/"hs")
+                es_valido = (
+                    ("available" in label_lower and "no available" not in label_lower) or
+                    "disponible" in label_lower or
+                    any(h in label_lower for h in [" am", " pm", " hs", ":00", ":30"])
+                )
+
+                if es_valido:
                     label_limpio = " ".join(label.split())
-                    if label_limpio not in fechas_detectadas:
-                        fechas_detectadas.append(label_limpio)
+                    if label_limpio not in fechas_disponibles:
+                        fechas_disponibles.append(label_limpio)
 
             browser.close()
 
-            if fechas_detectadas:
-                lista_str = "\n".join([f"• 📅 <b>{f}</b>" for f in fechas_detectadas[:5]])
+            # Solo enviamos mensaje SI ENCONTRAMOS AL MENOS UN TURNO VÁLIDO
+            if fechas_disponibles:
+                lista_str = "\n".join([f"• 📅 <b>{f}</b>" for f in fechas_disponibles[:5]])
                 msg = (
                     f"<b>¡TURNO DETECTADO EN GOOGLE CALENDAR!</b>\n\n"
                     f"<b>Fechas/Horarios disponibles encontrados:</b>\n{lista_str}\n\n"
                     f"🔗 <b>Reservá rápido acá:</b> {LINK_CALENDAR}"
                 )
+                print("🚀 ¡Turno REAL detectado! Enviando alerta a Telegram...")
+                enviar_telegram(msg)
             else:
-                msg = (
-                    f"<b>¡TURNO DETECTADO EN GOOGLE CALENDAR!</b>\n\n"
-                    f"Se detectó un espacio libre en la agenda, pero no se pudo formatear el texto de la fecha.\n\n"
-                    f"🔗 <b>Entrá directo a revisar:</b> {LINK_CALENDAR}"
-                )
-
-            print("🚀 Turno detectado. Enviando alerta a Telegram...")
-            enviar_telegram(msg)
+                print("🔍 Chequeo realizado: Se descartaron los botones 'no available times'. No hay turnos libres.")
 
     except Exception as e:
-        print(f"❌ Error durante el scraping con Playwright: {e}")
+        print(f"❌ Error durante la verificación: {e}")
 
 if __name__ == "__main__":
     verificar_turnos_playwright()
