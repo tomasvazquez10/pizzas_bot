@@ -1,4 +1,6 @@
 import os
+import json
+import re
 import requests
 from bs4 import BeautifulSoup
 
@@ -31,6 +33,25 @@ def enviar_telegram(mensaje):
     except Exception as e:
         print(f"❌ Error al enviar mensaje a Telegram: {e}")
 
+def buscar_fechas_en_html(html_text):
+    """
+    Busca patrones de fechas / horarios en el JSON o texto embebido de Google Calendar.
+    Ejemplos de patrones habituales: YYYY-MM-DD, fechas en formato ISO o timestamps.
+    """
+    fechas_encontradas = []
+    
+    # Busca patrones ISO tipo 2026-08-10T14:00:00
+    patron_iso = r'\b202[6-9]-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])T(?:[01]\d|2[0-3]):[05]\d\b'
+    coincidencias = re.findall(patron_iso, html_text)
+    
+    if coincidencias:
+        # Eliminamos duplicados manteniendo el orden
+        for f in coincidencias:
+            if f not in fechas_encontradas:
+                fechas_encontradas.append(f)
+                
+    return fechas_encontradas
+
 def verificar_turnos():
     try:
         session = requests.Session()
@@ -44,12 +65,22 @@ def verificar_turnos():
         )
 
         if not sin_turnos and res.status_code == 200:
+            # Intentamos extraer fechas exactas del contenido
+            fechas = buscar_fechas_en_html(html)
+            
+            if fechas:
+                # Formateamos las fechas encontradas
+                lista_fechas = "\n".join([f"• 📅 <b>{f}</b>" for f in fechas[:5]])
+                texto_fechas = f"Fechas/Horarios detectados:\n{lista_fechas}"
+            else:
+                texto_fechas = "Se detectaron espacios habilitados en la agenda."
+
             msg = (
                 f"<b>¡TURNO DETECTADO EN GOOGLE CALENDAR!</b>\n\n"
-                f"Parece que se liberó un espacio en la agenda.\n\n"
-                f"Reservá rápido acá: {LINK_CALENDAR}"
+                f"{texto_fechas}\n\n"
+                f"🔗 <b>Reservá rápido acá:</b> {LINK_CALENDAR}"
             )
-            print("🚀 ¡Turno detectado! Enviando alerta...")
+            print("🚀 ¡Turno detectado! Enviando alerta con fechas...")
             enviar_telegram(msg)
         else:
             print("🔍 Chequeo realizado: Aún no hay turnos disponibles.")
